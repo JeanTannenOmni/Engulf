@@ -70,6 +70,18 @@ tr.cutline td{border-bottom:2px dashed var(--accent)}
     <p id="msg" class="small mut"></p>
   </div>
 
+  <div class="card" id="mathcard">
+    <h2>The maths before any results</h2>
+    <p class="small mut">What a field of this size allows, whatever happens at the tables. Fills in from the event, or enter your own numbers.</p>
+    <div class="row">
+      <label>Players<input id="mn" type="number" min="4" max="600" inputmode="numeric"></label>
+      <label>Swiss rounds<input id="mr" type="number" min="2" max="12" inputmode="numeric"></label>
+      <label>Top<input id="mt" type="number" min="1" max="64" inputmode="numeric" value="8"></label>
+    </div>
+    <div id="mathout" class="small mut">Enter a player count and number of rounds.</div>
+    <div class="scroll"><table id="mathtab"></table></div>
+  </div>
+
   <div id="out" hidden>
     <div class="wrap" style="padding:0">
       <div class="card">
@@ -111,6 +123,7 @@ tr.cutline td{border-bottom:2px dashed var(--accent)}
 
       <div class="card small mut">
         <p><b>How this works.</b> It reads every posted pairing and result, rebuilds the standings with Omnidex's own tiebreakers (points, opponents' match win %, game win %, opponents' game win %), then plays out everything still unknown thousands of times. Unfinished matches are treated as even, with draws and game scores at this season's observed rates. Rounds that are not paired yet are paired by points without rematches.</p>
+        <p>The maths card assumes standard Swiss pairing: players meet others on the same points, an odd group pairs one player down, and an odd field gives a bye. "Most who can reach it" is the largest number of players who could finish on that score or better.</p>
         <p>Percentages are estimates, not guarantees, until the last result is in. Checked against 39 completed events this season: the rebuilt final top 8 matched Omnidex every time.</p>
       </div>
     </div>
@@ -219,6 +232,55 @@ function gaSimulate(S, opts) {
   }
   return out;
 }
+function gaBlankState(N, R) { const P = []; for (let i = 0; i < N; i++) P.push({ id: i, name: 'P' + i, w: 0, l: 0, t: 0, t0: 0, b: 0, gw: 0, gp: 0, opp: [], dropped: false, tb: i, last: 0 }); return { P, idx: new Map(), pending: [], current: 0, totalRounds: R, roundsLeft: R, roundOpen: false }; }
+// Mathematical thresholds for a Swiss event of N players and R rounds, before any result is known.
+// Model: each round players are paired inside their points group; an odd group pairs its last player down;
+// an odd field gives the lowest player a bye (3 points). Results are chosen adversarially.
+function gaThresholds(N, R, topN, tries) {
+  tries = tries || 4000;
+  const maxP = 3 * R;
+  const potential = (term, draws) => { // V[r][p] = best achievable share of a group that ends up satisfying term
+    const V = []; for (let r = 0; r <= R; r++) V.push(new Float64Array(maxP + 4));
+    for (let p = 0; p <= maxP + 3; p++) V[R][p] = term(p) ? 1 : 0;
+    for (let r = R - 1; r >= 0; r--) for (let p = 0; p <= maxP; p++) { const dec = (V[r + 1][p + 3] + V[r + 1][p]) / 2, dr = V[r + 1][p + 1]; V[r][p] = draws ? Math.max(dec, dr) : dec; }
+    return V; };
+  const construct = (term, draws) => { // play the event out pair by pair, always taking the result that helps term most
+    const V = potential(term, draws); let c = new Int32Array(maxP + 4); c[0] = N;
+    for (let r = 0; r < R; r++) { const nx = new Int32Array(maxP + 4), v = V[r + 1]; let carry = -1;
+      for (let p = maxP; p >= 0; p--) { let k = c[p]; if (!k) continue;
+        if (carry >= 0) { const a = carry, b = p; k--; carry = -1; // cross-group pair: a is the higher score
+          const o = [[v[a + 3] + v[b], a + 3, b], [v[a] + v[b + 3], a, b + 3]]; if (draws) o.push([v[a + 1] + v[b + 1], a + 1, b + 1]);
+          o.sort((x, y) => y[0] - x[0]); nx[o[0][1]]++; nx[o[0][2]]++; }
+        const pairs = k >> 1; if (k & 1) carry = p;
+        if (pairs) { if (draws && 2 * v[p + 1] > v[p + 3] + v[p]) nx[p + 1] += 2 * pairs; else { nx[p + 3] += pairs; nx[p] += pairs; } } }
+      if (carry >= 0) nx[carry + 3]++; // bye
+      c = nx; }
+    return c; };
+  // randomised search around the greedy plan: groups may split between drawn and decided pairs
+  let seed = 12345; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const search = (term, draws, tries) => { const V = potential(term, draws); let best = -1;
+    for (let t = 0; t < tries; t++) { let c = new Int32Array(maxP + 4); c[0] = N; const eps = t === 0 ? 0 : 0.15 + 0.5 * rnd();
+      for (let r = 0; r < R; r++) { const nx = new Int32Array(maxP + 4), v = V[r + 1]; let carry = -1;
+        for (let p = maxP; p >= 0; p--) { let k = c[p]; if (!k) continue;
+          if (carry >= 0) { const a = carry, b = p; k--; carry = -1; const o = [[v[a + 3] + v[b], a + 3, b], [v[a] + v[b + 3], a, b + 3]]; if (draws) o.push([v[a + 1] + v[b + 1], a + 1, b + 1]);
+            o.sort((x, y) => y[0] - x[0]); const pick = rnd() < eps ? o[(rnd() * o.length) | 0] : o[0]; nx[pick[1]]++; nx[pick[2]]++; }
+          const pairs = k >> 1; if (k & 1) carry = p;
+          if (pairs) { let d = draws && 2 * v[p + 1] > v[p + 3] + v[p] ? pairs : 0; if (draws && rnd() < eps) d = (rnd() * (pairs + 1)) | 0; nx[p + 1] += 2 * d; nx[p + 3] += pairs - d; nx[p] += pairs - d; } }
+        if (carry >= 0) nx[carry + 3]++; c = nx; }
+      let s = 0; for (let p = 0; p <= maxP; p++) if (c[p] && term(p)) s += c[p]; if (s > best) best = s; }
+    return best; };
+  const reach = p => { for (let w = 0; w <= R; w++) { const d = p - 3 * w; if (d >= 0 && w + d <= R) return true; } return false; };
+  const nth = c => { let k = 0; for (let p = maxP; p >= 0; p--) { k += c[p]; if (k >= topN) return p; } return 0; };
+  const calc = draws => { let lock = null, low = null; const rows = [];
+    for (let X = maxP; X >= 0; X--) { if (!reach(X)) continue; if (!draws && X % 3) continue;
+      const ge = search(p => p >= X, draws, tries), gt = N - search(p => p <= X, draws, tries);
+      rows.push({ pts: X, mostAtOrAbove: ge, fewestAbove: gt, safe: ge <= topN, possible: gt < topN });
+      if (ge <= topN) lock = X; if (gt < topN && (low === null || X < low)) low = X; }
+    return { lock, low, rows }; };
+  return { N, R, topN, withDraws: calc(true), decisive: calc(false) };
+}
+function gaRecord(p, R) { // friendliest way to say a points total
+  let best = null; for (let w = Math.floor(p / 3); w >= 0; w--) { const d = p - 3 * w, l = R - w - d; if (d >= 0 && l >= 0) { best = w + '-' + l + '-' + d; break; } } return best; }
 
 </script>
 <script>
@@ -334,11 +396,30 @@ function render() {
   ctx.finished = finished;
 }
 
+let mathKey = '';
+function renderMath() {
+  const N = +$('mn').value, R = +$('mr').value, top = +$('mt').value; if (!(N >= 4 && R >= 2 && top >= 1)) return; const key = N + '/' + R + '/' + top; if (key === mathKey) return; mathKey = key;
+  $('mathout').textContent = 'Working it out…';
+  setTimeout(() => {
+    const t = gaThresholds(N, R, top, 2500), d = t.withDraws, nd = t.decisive, rec = p => p + ' points (' + gaRecord(p, R) + ')';
+    const sim = gaSimulate(gaBlankState(N, R), { sims: 1500, topN: top, me: -1, idRule: true });
+    let h = '<p><b>Always enough:</b> ' + (d.lock == null ? 'nothing short of a perfect record' : rec(d.lock)) + '. No combination of other results can push you out.' + (nd.lock != null && nd.lock !== d.lock ? ' In plain wins and losses that means ' + rec(nd.lock) + '.' : '') + '</p>';
+    h += '<p><b>Least that can get there:</b> ' + rec(nd.low) + ' when every match has a winner, decided on tiebreakers.' + (d.low < nd.low ? ' With enough draws across the whole field it is mathematically possible on as few as ' + d.low + ' points, which will not happen in practice.' : '') + '</p>';
+    $('mathout').innerHTML = h;
+    let rows = '<tr><th class="n">Points</th><th>Record</th><th>Verdict</th><th class="n">Most who can reach it</th><th class="n">Typical event</th></tr>';
+    for (const r of d.rows) { if (r.pts < nd.low - 3) break; const g = sim.byPts[r.pts], f = g ? g[0] / g[1] : null;
+      const v = r.safe ? ['in', 'Always in'] : r.fewestAbove >= top ? ['out', 'Cannot make it'] : r.pts >= nd.low ? ['bub', 'Tiebreakers decide'] : ['out', 'Only with mass draws'];
+      rows += '<tr><td class="n">' + r.pts + '</td><td>' + gaRecord(r.pts, R) + '</td><td><span class="pill ' + v[0] + '">' + v[1] + '</span></td><td class="n">' + r.mostAtOrAbove + '</td><td class="n">' + (f == null ? '–' : f >= 1 ? 'all in' : f <= 0 ? 'none in' : f > 0.99 ? '>99% in' : f < 0.01 ? '<1% in' : Math.round(100 * f) + '% in') + '</td></tr>'; }
+    $('mathtab').innerHTML = rows;
+  }, 20);
+}
+['mn', 'mr', 'mt'].forEach(i => $(i).addEventListener('change', renderMath));
+
 async function run(quiet) {
   if (busy) return; const m = ($('ev').value.match(/(\d{3,})/) || [])[1];
   if (!m) { $('msg').innerHTML = '<span class="err">Paste an Omnidex event link or its numeric ID.</span>'; return; }
   busy = true; $('go').disabled = true; if (!quiet) $('msg').textContent = 'Loading from Omnidex…';
-  try { await load(m); busy = false; await new Promise(r => setTimeout(r, 10)); render(); save(m); }
+  try { await load(m); busy = false; await new Promise(r => setTimeout(r, 10)); render(); save(m); const np = Math.max((ctx.ev.players || []).length, Object.keys(ctx.names).length), ts = $('topn').value; if (np >= 4 && ctx.total) { $('mn').value = np; $('mr').value = ctx.total; $('mt').value = ts === 'auto' ? (ctx.ev.singleEliminationCutSize || 8) : +ts; renderMath(); } }
   catch (e) { $('msg').innerHTML = '<span class="err">' + esc(e.message || 'Could not reach Omnidex. Check your connection.') + '</span>'; }
   busy = false; $('go').disabled = false; schedule();
 }
