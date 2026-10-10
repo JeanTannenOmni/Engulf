@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Top 8 Calculator · Grand Archive</title>
+<style>
+:root{--bg:#f3f4f8;--surface:#fff;--ink:#191b2b;--muted:#5d6179;--line:#d9dbe7;--accent:#4a3fb5;--accent-soft:#e7e5f8;--good:#1f7a4d;--warn:#9a6a00;--bad:#b23a48;--goodbg:#dff3e8;--warnbg:#fbefcf;--badbg:#f8dfe2}
+@media (prefers-color-scheme:dark){:root{--bg:#12131c;--surface:#1b1d2a;--ink:#e9eaf3;--muted:#a0a4bd;--line:#30334a;--accent:#a79df5;--accent-soft:#2a2850;--good:#5fcb94;--warn:#e6b84d;--bad:#f08a95;--goodbg:#173527;--warnbg:#3a2f12;--badbg:#3d1c22;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 56px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:22px;margin:0;line-height:1.2}
+h2{font-size:16px;margin:0}
+p{margin:0}
+.mut{color:var(--muted)} .small{font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+label.full{grid-column:1/-1}
+input,select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
+button{background:var(--accent);color:var(--surface);border-color:var(--accent);font-weight:600;cursor:pointer}
+button.ghost{background:none;color:var(--accent)}
+button:disabled{opacity:.5}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1 1 140px}
+.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px}
+.check input{width:auto}
+.big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+.kv div{display:flex;flex-direction:column}
+.kv b{font-size:18px;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+th{font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:600;font-size:13px}
+.in{background:var(--goodbg);color:var(--good)} .bub{background:var(--warnbg);color:var(--warn)} .out{background:var(--badbg);color:var(--bad)}
+tr.me td{background:var(--accent-soft);font-weight:600}
+tr.cutline td{border-bottom:2px dashed var(--accent)}
+.err{color:var(--bad)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Top 8 Calculator</h1>
+    <p class="mut small">Grand Archive · live from Omnidex. Shows what you need from here to finish in the top cut.</p>
+  </header>
+
+  <div class="card">
+    <form id="f">
+      <label class="full">Omnidex event link or ID
+        <input id="ev" inputmode="url" placeholder="https://omni.gatcg.com/events/64396" autocomplete="off" required>
+      </label>
+      <label>Your Omnidex username
+        <input id="user" list="players" placeholder="Username" autocomplete="off" autocapitalize="off">
+        <datalist id="players"></datalist>
+      </label>
+      <label>Finish in the top
+        <select id="topn"><option value="auto">Auto (cut size, else 8)</option><option>4</option><option>8</option><option>16</option><option>32</option></select>
+      </label>
+      <label class="check full"><input type="checkbox" id="idrule" checked> Assume last-round players who are safe with a draw will take one</label>
+      <div class="row full"><button type="submit" id="go">Check</button><button type="button" class="ghost" id="share">Copy share link</button></div>
+    </form>
+    <p id="msg" class="small mut"></p>
+  </div>
+
+  <div id="out" hidden>
+    <div class="wrap" style="padding:0">
+      <div class="card">
+        <h2 id="evname"></h2>
+        <p class="small mut" id="evstate"></p>
+        <label class="check small"><input type="checkbox" id="auto" checked> Refresh automatically every 30 seconds while the event is running</label>
+      </div>
+
+      <div class="card" id="mecard">
+        <div class="row" style="align-items:flex-end">
+          <div><div class="mut small" id="melabel">Your chance of top 8</div><div class="big" id="mechance">–</div></div>
+          <div class="kv" style="flex:2 1 260px">
+            <div><span class="mut small">Place now</span><b id="merank">–</b></div>
+            <div><span class="mut small">Record</span><b id="merec">–</b></div>
+            <div><span class="mut small">Points</span><b id="mepts">–</b></div>
+            <div><span class="mut small">Opp. win %</span><b id="meomw">–</b></div>
+          </div>
+        </div>
+        <p class="small" id="menote"></p>
+      </div>
+
+      <div class="card" id="needcard">
+        <h2>What you need from here</h2>
+        <div class="scroll"><table id="need"></table></div>
+        <p class="small mut" id="neednote"></p>
+      </div>
+
+      <div class="card">
+        <h2 id="cuth">Where the cut is likely to fall</h2>
+        <div class="scroll"><table id="cut"></table></div>
+        <p class="small mut" id="cutnote"></p>
+      </div>
+
+      <div class="card">
+        <h2>Standings now</h2>
+        <div class="scroll"><table id="stand"></table></div>
+        <button type="button" class="ghost" id="more">Show everyone</button>
+      </div>
+
+      <div class="card small mut">
+        <p><b>How this works.</b> It reads every posted pairing and result, rebuilds the standings with Omnidex's own tiebreakers (points, opponents' match win %, game win %, opponents' game win %), then plays out everything still unknown thousands of times. Unfinished matches are treated as even, with draws and game scores at this season's observed rates. Rounds that are not paired yet are paired by points without rematches.</p>
+        <p>Percentages are estimates, not guarantees, until the last result is in. Checked against 39 completed events this season: the rebuilt final top 8 matched Omnidex every time.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Top-cut calculator engine. Pure functions, no DOM.
+// Tiebreak rules reverse-engineered from Omnidex standings (current season) and checked against 55 events:
+//  points: win 3, bye 3, any draw 1
+//  MW%  = wins / (wins + losses + played draws); 0-0 intentional draws and byes are left out
+//  GW%  = games won / games played (byes left out)
+//  OMW% / OGW% = average over opponents faced of max(1/3, their MW% / GW%)
+//  order: points, OMW%, GW%, OGW%, then Omnidex's own tiebreaker number
+const GA_RATES = { tie: 0.076, s20: 0.594, s21: 0.334 }; // observed this season over 9,118 matches
+
+function gaBuildState(rounds, names, totalRounds, seeds) {
+  // rounds: array (index 0 = round 1) of arrays of matches: {p:[{id,sc,st,dr}]}
+  const idx = new Map(), P = [];
+  const get = id => { if (!idx.has(id)) { idx.set(id, P.length); P.push({ id, name: names[id] || ('#' + id), w: 0, l: 0, t: 0, t0: 0, b: 0, gw: 0, gp: 0, opp: [], dropped: false, tb: (seeds && seeds[id]) || 0, last: 0 }); } return P[idx.get(id)]; };
+  let pending = [], current = 0;
+  rounds.forEach((ms, r) => {
+    const live = [];
+    for (const m of ms) {
+      const pp = m.p;
+      if (pp.length === 1) { const a = get(pp[0].id); a.last = r + 1; if (pp[0].dr) a.dropped = true; a.b++; continue; }
+      if (pp.length !== 2) continue;
+      const A = get(pp[0].id), B = get(pp[1].id), ga = pp[0].sc || 0, gb = pp[1].sc || 0;
+      A.last = B.last = r + 1;
+      if (pp[0].dr) A.dropped = true; if (pp[1].dr) B.dropped = true;
+      const sa = pp[0].st, sb = pp[1].st;
+      if (sa === 'winner' || sb === 'winner' || sa === 'tied' || sb === 'tied') {
+        if (sa === 'winner') { A.w++; B.l++; } else if (sb === 'winner') { B.w++; A.l++; }
+        else if (ga + gb === 0) { A.t0++; B.t0++; } else { A.t++; B.t++; }
+        A.gw += ga; A.gp += ga + gb; B.gw += gb; B.gp += ga + gb;
+        A.opp.push(idx.get(B.id)); B.opp.push(idx.get(A.id));
+      } else live.push([idx.get(A.id), idx.get(B.id)]);
+    }
+    if (r === rounds.length - 1) { pending = live; current = r + 1; }
+  });
+  // anyone missing from the latest posted round has left the event
+  if (current > 1) for (const p of P) if (p.last < current) p.dropped = true;
+  const roundOpen = pending.length > 0;
+  return { P, idx, pending, current, totalRounds, roundsLeft: totalRounds - current + (roundOpen ? 1 : 0), roundOpen };
+}
+
+function gaStandings(S) {
+  const P = S.P, n = P.length, mw = new Float64Array(n), gwp = new Float64Array(n), rows = [];
+  for (let i = 0; i < n; i++) { const p = P[i], d = p.w + p.l + p.t; mw[i] = d ? p.w / d : 0; gwp[i] = p.gp ? p.gw / p.gp : 0; }
+  for (let i = 0; i < n; i++) { const p = P[i]; let a = 0, b = 0; for (const o of p.opp) { a += Math.max(1 / 3, mw[o]); b += Math.max(1 / 3, gwp[o]); }
+    const k = p.opp.length; rows.push({ i, id: p.id, name: p.name, dropped: p.dropped, pts: 3 * (p.w + p.b) + p.t + p.t0, rec: p.w + p.b, l: p.l, d: p.t + p.t0, omw: k ? a / k : 0, gw: gwp[i], ogw: k ? b / k : 0, tb: p.tb }); }
+  rows.sort(gaCmp); rows.forEach((r, k) => r.rank = k + 1); return rows;
+}
+function gaCmp(a, b) { return b.pts - a.pts || gaR(b.omw) - gaR(a.omw) || gaR(b.gw) - gaR(a.gw) || gaR(b.ogw) - gaR(a.ogw) || a.tb - b.tb; }
+function gaR(x) { return Math.round(x * 1e5); }
+
+// Monte Carlo over everything still unknown. opts: {sims, topN, me (index or -1), forced: ['W'|'D'|'L', ...] for me per remaining round, idRule, rng}
+function gaSimulate(S, opts) {
+  const P = S.P, n = P.length, topN = opts.topN, me = opts.me == null ? -1 : opts.me, forced = opts.forced || null, rnd = opts.rng || Math.random;
+  const W = new Int16Array(n), L = new Int16Array(n), T = new Int16Array(n), X = new Int16Array(n), GW = new Int16Array(n), GP = new Int16Array(n), PT = new Int16Array(n);
+  const bw = Int16Array.from(P, p => p.w), bl = Int16Array.from(P, p => p.l), bt = Int16Array.from(P, p => p.t), bgw = Int16Array.from(P, p => p.gw), bgp = Int16Array.from(P, p => p.gp), bpt = Int16Array.from(P, p => 3 * (p.w + p.b) + p.t + p.t0);
+  const ex = P.map(() => []), act = []; for (let i = 0; i < n; i++) if (!P[i].dropped) act.push(i);
+  const mw = new Float64Array(n), gwp = new Float64Array(n), omw = new Float64Array(n), ogw = new Float64Array(n), ord = new Int32Array(n);
+  const out = { sims: opts.sims, meIn: 0, meRanks: [], mePts: 0, cut: {}, byPts: {}, inCount: new Int32Array(n) };
+  const played = (a, b) => P[a].opp.indexOf(b) >= 0 || ex[a].indexOf(b) >= 0;
+  const play = (a, b, res) => { // res: 'A','B','T','I' or null for random
+    if (!res) { const r = rnd(); res = r < GA_RATES.tie ? 'T' : (rnd() < 0.5 ? 'A' : 'B'); }
+    ex[a].push(b); ex[b].push(a);
+    if (res === 'I') { X[a]++; X[b]++; PT[a]++; PT[b]++; return; }
+    if (res === 'T') { T[a]++; T[b]++; PT[a]++; PT[b]++; GW[a]++; GW[b]++; GP[a] += 2; GP[b] += 2; return; }
+    const w = res === 'A' ? a : b, l = res === 'A' ? b : a, r = rnd();
+    W[w]++; L[l]++; PT[w] += 3;
+    if (r < GA_RATES.s20) { GW[w] += 2; GP[w] += 2; GP[l] += 2; } else if (r < GA_RATES.s20 + GA_RATES.s21) { GW[w] += 2; GW[l]++; GP[w] += 3; GP[l] += 3; } else { GW[w]++; GP[w]++; GP[l]++; }
+  };
+  const meRes = (k, a, b, isLast) => { if (!forced || me < 0 || (a !== me && b !== me)) return null; const f = forced[k]; if (!f) return null; if (f === 'D') return isLast ? 'I' : 'T'; return (f === 'W') === (a === me) ? 'A' : 'B'; };
+  for (let s = 0; s < opts.sims; s++) {
+    W.set(bw); L.set(bl); T.set(bt); X.fill(0); GW.set(bgw); GP.set(bgp); PT.set(bpt); for (let i = 0; i < n; i++) ex[i].length = 0;
+    let k = 0;
+    for (let r = S.current + (S.roundOpen ? 0 : 1); r <= S.totalRounds; r++, k++) {
+      const isLast = r === S.totalRounds; let pairs;
+      if (r === S.current && S.roundOpen) pairs = S.pending;
+      else { // simulated Swiss pairing: by points, random inside a points group, no rematches where avoidable
+        const a = act.slice(); for (let i = a.length - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0, t = a[i]; a[i] = a[j]; a[j] = t; }
+        a.sort((x, y) => PT[y] - PT[x]); pairs = []; const used = new Uint8Array(n);
+        for (let i = 0; i < a.length; i++) { const p = a[i]; if (used[p]) continue; used[p] = 1; let q = -1;
+          for (let j = i + 1; j < a.length; j++) { if (!used[a[j]] && !played(p, a[j])) { q = a[j]; break; } }
+          if (q < 0) for (let j = i + 1; j < a.length; j++) { if (!used[a[j]]) { q = a[j]; break; } }
+          if (q < 0) { PT[p] += 3; continue; } // bye
+          used[q] = 1; pairs.push([p, q]); }
+      }
+      // last-round intentional draws: two players who are both through on points with a draw usually take it
+      let safe = 1e9; if (isLast && opts.idRule) { for (let i = 0; i < n; i++) ord[i] = i; const o = Array.from(ord).sort((x, y) => PT[y] - PT[x]); safe = o.length > topN ? PT[o[topN]] + 3 : -1; }
+      for (const [a, b] of pairs) { let res = meRes(k, a, b, isLast);
+        if (!res && isLast && opts.idRule && PT[a] + 1 > safe && PT[b] + 1 > safe && rnd() < 0.8) res = 'I';
+        play(a, b, res); }
+    }
+    for (let i = 0; i < n; i++) { const d = W[i] + L[i] + T[i]; mw[i] = d ? W[i] / d : 0; gwp[i] = GP[i] ? GW[i] / GP[i] : 0; }
+    for (let i = 0; i < n; i++) { let a = 0, b = 0, c = 0; const o1 = P[i].opp, o2 = ex[i];
+      for (let j = 0; j < o1.length; j++) { a += Math.max(1 / 3, mw[o1[j]]); b += Math.max(1 / 3, gwp[o1[j]]); c++; }
+      for (let j = 0; j < o2.length; j++) { a += Math.max(1 / 3, mw[o2[j]]); b += Math.max(1 / 3, gwp[o2[j]]); c++; }
+      omw[i] = c ? a / c : 0; ogw[i] = c ? b / c : 0; }
+    const o = []; for (let i = 0; i < n; i++) o.push(i);
+    o.sort((x, y) => PT[y] - PT[x] || gaR(omw[y]) - gaR(omw[x]) || gaR(gwp[y]) - gaR(gwp[x]) || gaR(ogw[y]) - gaR(ogw[x]) || P[x].tb - P[y].tb);
+    const lim = Math.min(topN, n); const cutPts = PT[o[lim - 1]]; out.cut[cutPts] = (out.cut[cutPts] || 0) + 1;
+    for (let r = 0; r < n; r++) { const i = o[r], pt = PT[i]; if (P[i].dropped) continue; const g = out.byPts[pt] || (out.byPts[pt] = [0, 0]); g[1]++; if (r < lim) { g[0]++; out.inCount[i]++; } if (i === me) { out.meRanks.push(r + 1); out.mePts = pt; if (r < lim) out.meIn++; } }
+  }
+  return out;
+}
+
+</script>
+<script>
+const API = 'https://api.gatcg.com/omnidex/events/';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let ctx = null, timer = null, showAll = false, busy = false;
+
+async function getJSON(path) {
+  const r = await fetch(API + path, { cache: 'no-store' });
+  if (r.status === 404) throw new Error('Omnidex has no event with that ID.');
+  if (!r.ok) throw new Error('Omnidex returned an error (' + r.status + '). Try again in a moment.');
+  return r.json();
+}
+const conv = p => (p.pairings || []).map(m => ({ p: (m.pairing || []).map(x => ({ id: x.id, sc: x.score, st: x.status, dr: x.dropped })) }));
+
+async function load(evId) {
+  if (!ctx || ctx.id !== evId) {
+    const ev = await getJSON(evId);
+    if (ev.teamSize) throw new Error('Team events are not supported yet.');
+    const swiss = (ev.stages || []).find(s => s.type === 'swiss');
+    if (!swiss) throw new Error('This event has no Swiss rounds.');
+    ctx = { id: evId, ev, stage: swiss.id, rounds: [], done: [], names: {} };
+  }
+  const [players, standings, latest] = await Promise.all([
+    getJSON(evId + '/players').catch(() => []),
+    getJSON(evId + '/standings').catch(() => null),
+    getJSON(evId + '/pairings?stage=' + ctx.stage).catch(() => null)
+  ]);
+  for (const p of players) ctx.names[p.id] = p.username;
+  ctx.seeds = {}; if (standings && standings.standings) for (const s of standings.standings) ctx.seeds[s.id] = s.tiebreaker;
+  if (!latest || !latest.round || !latest.pairings) { ctx.rounds = []; ctx.total = ctx.ev.swissRounds || 0; ctx.round = null; return; }
+  const cur = latest.round.id; ctx.total = latest.round.total || ctx.ev.swissRounds; ctx.round = latest.round;
+  const need = []; for (let r = 1; r < cur; r++) if (!ctx.done[r]) need.push(r);
+  const got = await Promise.all(need.map(r => getJSON(evId + '/pairings?stage=' + ctx.stage + '&round=' + r)));
+  need.forEach((r, i) => { ctx.rounds[r - 1] = conv(got[i]); if (got[i].round && got[i].round.status === 'complete') ctx.done[r] = true; });
+  ctx.rounds[cur - 1] = conv(latest); ctx.rounds.length = cur;
+}
+
+function pct(p, sims) { if (p >= 1) return 'In all ' + sims + ' runs'; if (p <= 0) return 'In none of ' + sims + ' runs'; if (p > 0.99) return '>99%'; if (p < 0.01) return '<1%'; return Math.round(p * 100) + '%'; }
+function cls(p) { return p >= 0.9 ? 'in' : p <= 0.1 ? 'out' : 'bub'; }
+function median(a) { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; }
+function combos(m) { // multisets of W/L/D, wins first, a draw (if any) placed last so it lands in the final round
+  const out = [];
+  if (m <= 3) { for (let w = m; w >= 0; w--) for (let d = 0; d <= m - w; d++) out.push('W'.repeat(w) + 'L'.repeat(m - w - d) + 'D'.repeat(d)); }
+  else { for (let w = m; w >= 0; w--) { out.push('W'.repeat(w) + 'L'.repeat(m - w)); if (w < m) out.push('W'.repeat(w) + 'L'.repeat(m - w - 1) + 'D'); } }
+  return out;
+}
+function describe(seq) { const w = (seq.match(/W/g) || []).length, l = (seq.match(/L/g) || []).length, d = (seq.match(/D/g) || []).length; const parts = []; if (w) parts.push(w + (w === 1 ? ' win' : ' wins')); if (d) parts.push(d + (d === 1 ? ' draw' : ' draws')); if (l) parts.push(l + (l === 1 ? ' loss' : ' losses')); return parts.join(', '); }
+
+function render() {
+  const ev = ctx.ev, topSel = $('topn').value, topN = topSel === 'auto' ? (ev.singleEliminationCutSize || 8) : +topSel, idRule = $('idrule').checked;
+  $('out').hidden = false; $('evname').textContent = ev.name;
+  if (!ctx.rounds.length) { $('evstate').textContent = 'No pairings posted yet. Check back when round 1 is up.'; ['mecard', 'needcard'].forEach(i => $(i).hidden = true); $('cut').innerHTML = ''; $('stand').innerHTML = ''; return; }
+  const S = gaBuildState(ctx.rounds, ctx.names, ctx.total, ctx.seeds), rows = gaStandings(S), n = S.P.length;
+  const finished = !S.roundOpen && S.current >= S.totalRounds;
+  const waiting = S.pending.length, totalM = ctx.rounds[S.current - 1].filter(m => m.p.length === 2).length;
+  let state = 'Round ' + S.current + ' of ' + S.totalRounds + ' · ' + n + ' players · ';
+  state += finished ? 'Swiss rounds complete.' : S.roundOpen ? (totalM - waiting) + ' of ' + totalM + ' results in' : 'round complete, next pairings not posted yet';
+  if (ctx.round && ctx.round.timer && ctx.round.timer.timerEnd && S.roundOpen) state += ' · round clock ends ' + new Date(ctx.round.timer.timerEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  state += ' · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  $('evstate').textContent = state;
+  $('players').innerHTML = S.P.map(p => '<option value="' + esc(p.name) + '">').join('');
+  $('melabel').textContent = 'Your chance of top ' + topN; $('cuth').textContent = 'Where the top ' + topN + ' cut is likely to fall';
+
+  const uname = $('user').value.trim().toLowerCase(); let me = -1; if (uname) me = S.P.findIndex(p => p.name.toLowerCase() === uname);
+  const field = finished ? null : gaSimulate(S, { sims: 1500, topN, me, idRule });
+  $('mecard').hidden = me < 0; $('needcard').hidden = me < 0 || finished;
+  if (uname && me < 0) $('msg').innerHTML = '<span class="err">No player called "' + esc($('user').value) + '" in this event. Pick a name from the list.</span>'; else if (!busy) $('msg').textContent = '';
+
+  if (me >= 0) {
+    const r = rows.find(x => x.i === me), P = S.P[me];
+    $('merank').textContent = r.rank + ' of ' + n; $('merec').textContent = r.rec + '-' + r.l + '-' + r.d; $('mepts').textContent = r.pts; $('meomw').textContent = (100 * r.omw).toFixed(1);
+    if (finished) { const inn = r.rank <= topN; $('mechance').innerHTML = '<span class="pill ' + (inn ? 'in' : 'out') + '">' + (inn ? 'In' : 'Out') + '</span>'; $('menote').textContent = 'Final Swiss standing: ' + r.rank + (inn ? '. You finished inside the top ' + topN + '.' : '. The top ' + topN + ' ended at ' + rows[Math.min(topN, n) - 1].pts + ' points.'); }
+    else {
+      const pAll = field.meIn / field.sims; $('mechance').innerHTML = '<span class="pill ' + cls(pAll) + '">' + pct(pAll, field.sims) + '</span>';
+      const mine = S.pending.find(m => m[0] === me || m[1] === me); let note = P.dropped ? 'Omnidex shows you as dropped from this event.' : '';
+      if (mine) { const o = rows.find(x => x.i === (mine[0] === me ? mine[1] : mine[0])); note = 'This round you play ' + o.name + ' (' + o.rec + '-' + o.l + '-' + o.d + ', ' + o.pts + ' points, currently ' + o.rank + ').'; }
+      else if (S.roundOpen) note = 'Your result for this round is in. The figure above waits on ' + waiting + ' other match' + (waiting === 1 ? '' : 'es') + '.';
+      $('menote').textContent = note + ' Overall chance assumes your remaining matches are even.';
+      // scenarios for my remaining matches
+      const myLeft = S.roundsLeft - (S.roundOpen && !mine ? 1 : 0);
+      let h = '<tr><th>From here</th><th class="n">Final points</th><th>Top ' + topN + '</th><th class="n">Typical finish</th></tr>';
+      if (myLeft <= 0 || P.dropped) h += '<tr><td colspan="4" class="mut">You have no matches left to play. Your place now depends on other results.</td></tr>';
+      else { const res = []; for (const seq of combos(myLeft)) {
+        const forced = (S.roundOpen && !mine ? [null] : []).concat(seq.split(''));
+        const o = gaSimulate(S, { sims: 400, topN, me, forced, idRule }), p = o.meIn / o.sims, rk = o.meRanks.slice().sort((a, b) => a - b);
+        const lo = rk[Math.floor(rk.length * 0.1)], hi = rk[Math.floor(rk.length * 0.9)];
+        res.push([o.mePts, p, '<tr><td>' + describe(seq) + '</td><td class="n">' + o.mePts + '</td><td><span class="pill ' + cls(p) + '">' + pct(p, o.sims) + '</span></td><td class="n">' + (lo === hi ? lo : lo + '–' + hi) + '</td></tr>']);
+      }
+      res.sort((a, b) => b[0] - a[0] || b[1] - a[1]); h += res.map(r => r[2]).join(''); }
+      $('need').innerHTML = h;
+      $('neednote').textContent = myLeft > 0 ? 'A draw is counted in your last match. In the final round it is treated as an intentional draw. Typical finish covers the middle 80% of runs.' : '';
+    }
+  }
+
+  // cut table
+  if (finished) { const c = rows[Math.min(topN, n) - 1].pts, same = rows.filter(x => x.pts === c), inn = same.filter(x => x.rank <= topN).length; $('cut').innerHTML = '<tr><th>Final cut</th><th class="n">Points</th><th>Detail</th></tr><tr><td>Place ' + Math.min(topN, n) + '</td><td class="n">' + c + '</td><td>' + inn + ' of ' + same.length + ' players on ' + c + ' points finished inside</td></tr>'; $('cutnote').textContent = ''; }
+  else {
+    const pts = Object.keys(field.byPts).map(Number).sort((a, b) => b - a); let h = '<tr><th class="n">Final points</th><th>Share of players on that score who make it</th><th class="n">Players per run</th></tr>', shown = 0;
+    for (const p of pts) { const [a, b] = field.byPts[p], f = a / b; if (f <= 0 && shown >= 1 && p < Math.min(...pts.filter(q => field.byPts[q][0] > 0)) - 3) continue; h += '<tr><td class="n">' + p + '</td><td><span class="pill ' + cls(f) + '">' + (f >= 1 ? 'All' : f <= 0 ? 'None' : f > 0.99 ? '>99%' : f < 0.01 ? '<1%' : Math.round(100 * f) + '%') + '</span></td><td class="n">' + (b / field.sims).toFixed(1) + '</td></tr>'; shown++; }
+    $('cut').innerHTML = h;
+    const cuts = Object.entries(field.cut).map(([k, v]) => [+k, v]).sort((a, b) => b[1] - a[1]);
+    $('cutnote').textContent = 'Place ' + Math.min(topN, n) + ' finishes on ' + cuts.filter(c => c[1] / field.sims >= 0.01).slice(0, 2).map(c => c[0] + ' points in ' + Math.round(100 * c[1] / field.sims) + '% of runs').join(', ') + '. Based on ' + field.sims + ' simulated finishes.';
+  }
+
+  // standings
+  let h = '<tr><th class="n">#</th><th>Player</th><th class="n">W-L-D</th><th class="n">Pts</th><th class="n">OMW%</th><th class="n">GW%</th><th class="n">OGW%</th>' + (field ? '<th class="n">Top ' + topN + '</th>' : '') + '</tr>';
+  const mr = me >= 0 ? rows.find(x => x.i === me).rank : 0, lim = showAll ? n : Math.max(topN + 8, 16);
+  rows.forEach(r => { if (r.rank > lim && r.i !== me) return; const p = field ? field.inCount[r.i] / field.sims : null;
+    h += '<tr class="' + (r.i === me ? 'me ' : '') + (r.rank === topN ? 'cutline' : '') + '"><td class="n">' + r.rank + '</td><td>' + esc(r.name) + (r.dropped ? ' <span class="mut">(dropped)</span>' : '') + '</td><td class="n">' + r.rec + '-' + r.l + '-' + r.d + '</td><td class="n">' + r.pts + '</td><td class="n">' + (100 * r.omw).toFixed(1) + '</td><td class="n">' + (100 * r.gw).toFixed(1) + '</td><td class="n">' + (100 * r.ogw).toFixed(1) + '</td>' + (field ? '<td class="n">' + (p >= 1 ? 'in' : p <= 0 ? '–' : p > 0.99 ? '>99%' : p < 0.01 ? '<1%' : Math.round(100 * p) + '%') + '</td>' : '') + '</tr>'; });
+  $('stand').innerHTML = h; $('more').textContent = showAll ? 'Show fewer' : 'Show everyone'; $('more').hidden = n <= lim && !showAll;
+  ctx.finished = finished;
+}
+
+async function run(quiet) {
+  if (busy) return; const m = ($('ev').value.match(/(\d{3,})/) || [])[1];
+  if (!m) { $('msg').innerHTML = '<span class="err">Paste an Omnidex event link or its numeric ID.</span>'; return; }
+  busy = true; $('go').disabled = true; if (!quiet) $('msg').textContent = 'Loading from Omnidex…';
+  try { await load(m); busy = false; await new Promise(r => setTimeout(r, 10)); render(); save(m); }
+  catch (e) { $('msg').innerHTML = '<span class="err">' + esc(e.message || 'Could not reach Omnidex. Check your connection.') + '</span>'; }
+  busy = false; $('go').disabled = false; schedule();
+}
+function schedule() { clearTimeout(timer); if (ctx && !ctx.finished && $('auto').checked && !document.hidden) timer = setTimeout(() => run(true), 30000); }
+function link(m) { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('event', m || ''); if ($('user').value.trim()) u.searchParams.set('user', $('user').value.trim()); return u; }
+function save(m) { try { localStorage.setItem('ga-top8', JSON.stringify({ e: m, u: $('user').value.trim() })); } catch (e) {} try { history.replaceState(null, '', link(m)); } catch (e) {} }
+
+$('f').addEventListener('submit', e => { e.preventDefault(); showAll = false; run(false); });
+$('topn').addEventListener('change', () => { if (ctx && ctx.rounds) render(); });
+$('idrule').addEventListener('change', () => { if (ctx && ctx.rounds) render(); });
+$('auto').addEventListener('change', schedule);
+$('more').addEventListener('click', () => { showAll = !showAll; render(); });
+$('share').addEventListener('click', async () => { const m = ($('ev').value.match(/(\d{3,})/) || [])[1]; if (!m) return; const t = link(m).toString(); try { await navigator.clipboard.writeText(t); $('msg').textContent = 'Link copied.'; } catch (e) { $('msg').textContent = t; } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ctx && !ctx.finished && $('auto').checked) run(true); });
+(function init() { const q = new URLSearchParams(location.search); let e = q.get('event'), u = q.get('user'); if (!e) { try { const s = JSON.parse(localStorage.getItem('ga-top8') || '{}'); e = s.e; u = u || s.u; } catch (x) {} } if (u) $('user').value = u; if (e) { $('ev').value = e; run(false); } })();
+</script>
+</body>
+</html>
